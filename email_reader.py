@@ -30,7 +30,7 @@ def mark_as_failed(mail, email_id):
 
 def get_latest_axios_email():
     user = os.getenv("EMAIL_USER")
-    password = os.getenv("EMAIL_PASS")
+    password = os.getenv("EMAIL_PASS").strip()
 
     mail = imaplib.IMAP4_SSL(IMAP_SERVER)
     mail.login(user, password)

@@ -13,7 +13,7 @@ from email_reader import (
 )
 
 SENDER_EMAIL = os.getenv("EMAIL_USER")
-SENDER_PASSWORD = os.getenv("EMAIL_PASS")
+SENDER_PASSWORD = os.getenv("EMAIL_PASS").strip()
 
 RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL")
 
