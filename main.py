@@ -41,7 +41,7 @@ def get_article_text(url):
 def send_email(content, link):
     msg = MIMEText(content + f"\n\n원문 링크: {link}")
     msg["Subject"] = "📈 Axios Macro 요약"
-    msg["From"] = f"Macro Bot <{SENDER_EMAIL}>"
+    msg["From"] = f"Macro Gorilla <{SENDER_EMAIL}>"
     msg["To"] = RECEIVER_EMAIL
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
