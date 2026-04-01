@@ -61,8 +61,11 @@ def main():
         analysis = analyze(text)
         send_email(analysis, "원문 링크는 이메일 참조")
 
+        print("✅ 메일 발송 완료:", email_id)
         # ✅ 성공 → 처리 완료 라벨
         mark_as_processed(mail, email_id)
+
+        print("✅ 라벨 적용 완료:", email_id)
 
     except Exception as e:
         print("❌ 처리 실패:", e)
