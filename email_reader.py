@@ -80,18 +80,36 @@ def get_latest_axios_email():
         subject = subject.decode(encoding or "utf-8")
 
     body = ""
-
+    link = None
+    
     if msg.is_multipart():
         for part in msg.walk():
             content_type = part.get_content_type()
             if content_type == "text/html":
                 html = part.get_payload(decode=True).decode(errors="ignore")
                 soup = BeautifulSoup(html, "html.parser")
+                
+                # 본문 텍스트
                 body = soup.get_text()
+
+                # 첫 번째 링크 추출
+                link = None
+
+                view_link = soup.find(
+                    "a",
+                    string=lambda text: text and "view" in text.lower() and "browser" in text.lower()
+                )
+
+                if view_link:
+                    link = view_link.get("href")
+                else:
+                    a_tag = soup.find("a", href=True)
+                    if a_tag:
+                        link = a_tag["href"]
     else:
         body = msg.get_payload(decode=True).decode(errors="ignore")
 
     body = clean_text(body)
 
     # ✅ mail 객체 + email_id도 같이 반환 (중요)
-    return subject, body, mail, latest_email_id
+    return subject, body, link, mail, latest_email_id

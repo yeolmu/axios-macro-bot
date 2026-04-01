@@ -55,11 +55,11 @@ def main():
         print("No email to process")
         return
 
-    subject, text, mail, email_id = result
+    subject, text, link, mail, email_id = result
 
     try:
         analysis = analyze(text)
-        send_email(analysis, "원문 링크는 이메일 참조")
+        send_email(analysis, link if link else "링크 없음")
 
         print("✅ 메일 발송 완료:", email_id)
         # ✅ 성공 → 처리 완료 라벨
