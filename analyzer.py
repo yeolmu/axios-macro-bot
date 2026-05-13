@@ -27,10 +27,17 @@ IMPORTANT:
 First, translate key sentences literally.
 Then summarize.
 
+Formatting (readability):
+- Put one blank line between sections 1–6.
+- Use a single "-" at the start of each bullet line (one idea per line).
+- Keep section headings exactly as numbered below (1. … 6.).
+
 Output format:
 
 1. 핵심 요약 (한 줄)
+
 2. 주요 내용 (3~5 bullet points)
+
 3. 시장 영향 (금리 / 주식 / 환율 / 미국 채무 상황 등 기사에 맞게 선택)
 
 4. 핵심 영어 표현 5개 (경제 맥락상 중요한 표현 우선)
