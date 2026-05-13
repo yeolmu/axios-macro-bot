@@ -11,7 +11,7 @@ def clean_text(text):
     cleaned = []
 
     for line in lines:
-        if len(line.strip()) < 30:
+        if line.strip() == "":
             continue
         if "unsubscribe" in line.lower():
             continue
