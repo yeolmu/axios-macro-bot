@@ -67,7 +67,7 @@ def _build_newsletter_html(body_text: str, original_subject: str | None, link: s
                 Axios Macro
               </p>
               <h1 style="margin:8px 0 0;font-size:22px;line-height:1.25;color:#111827;font-weight:700;">
-                오늘의 매크로 브리핑
+                매크로 뉴스레터
               </h1>
             </td>
           </tr>
@@ -80,8 +80,8 @@ def _build_newsletter_html(body_text: str, original_subject: str | None, link: s
           </tr>
           <tr>
             <td style="padding:24px 28px 32px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;">
-              <pre style="margin:0;font-family:inherit;font-size:15px;line-height:1.65;color:#111827;
-                white-space:pre-wrap;word-wrap:break-word;">{safe_body}</pre>
+              <pre style="margin:0;font-family:inherit;font-size:15px;line-height:1.75;color:#111827;
+                white-space:pre-wrap;word-wrap:break-word;letter-spacing:0.01em;">{safe_body}</pre>
               {cta}
             </td>
           </tr>
