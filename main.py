@@ -1,5 +1,6 @@
 import feedparser
 import html
+import re
 import smtplib
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
@@ -21,6 +22,18 @@ SENDER_PASSWORD = os.getenv("EMAIL_PASS").strip()
 RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL")
 
 
+def _markdown_bold_to_html(text: str) -> str:
+    """Convert **bold** to <strong>; escape all other text for safe HTML."""
+    parts: list[str] = []
+    last_end = 0
+    for match in re.finditer(r"\*\*(.+?)\*\*", text, flags=re.DOTALL):
+        parts.append(html.escape(text[last_end : match.start()]))
+        parts.append(f"<strong>{html.escape(match.group(1))}</strong>")
+        last_end = match.end()
+    parts.append(html.escape(text[last_end:]))
+    return "".join(parts)
+
+
 def _email_subject_line(original_subject: str | None) -> str:
     base = (original_subject or "Axios Macro").strip()
     if len(base) > 120:
@@ -29,7 +42,7 @@ def _email_subject_line(original_subject: str | None) -> str:
 
 
 def _build_newsletter_html(body_text: str, original_subject: str | None, link: str) -> str:
-    safe_body = html.escape(body_text.strip())
+    safe_body = _markdown_bold_to_html(body_text.strip())
     safe_subject = html.escape((original_subject or "제목 없음").strip())
     issued = datetime.now().strftime("%Y-%m-%d %H:%M")
     has_link = bool(link and link != "링크 없음")
@@ -39,10 +52,7 @@ def _build_newsletter_html(body_text: str, original_subject: str | None, link: s
         cta = f"""
         <p style="margin:28px 0 0;font-size:14px;line-height:1.5;">
           <a href="{safe_href}" style="display:inline-block;padding:10px 18px;background:#111827;color:#ffffff;
-            text-decoration:none;border-radius:6px;font-weight:600;">원문에서 보기</a>
-        </p>
-        <p style="margin:12px 0 0;font-size:12px;color:#6b7280;word-break:break-all;">
-          <a href="{safe_href}" style="color:#2563eb;text-decoration:underline;">{html.escape(link)}</a>
+            text-decoration:none;border-radius:6px;font-weight:600;">원문 보기</a>
         </p>"""
     else:
         cta = '<p style="margin:28px 0 0;font-size:13px;color:#6b7280;">원문 링크 없음</p>'
@@ -80,8 +90,8 @@ def _build_newsletter_html(body_text: str, original_subject: str | None, link: s
           </tr>
           <tr>
             <td style="padding:24px 28px 32px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;">
-              <pre style="margin:0;font-family:inherit;font-size:15px;line-height:1.75;color:#111827;
-                white-space:pre-wrap;word-wrap:break-word;letter-spacing:0.01em;">{safe_body}</pre>
+              <div style="margin:0;font-family:inherit;font-size:15px;line-height:1.75;color:#111827;
+                white-space:pre-wrap;word-wrap:break-word;letter-spacing:0.01em;">{safe_body}</div>
               {cta}
             </td>
           </tr>
