@@ -2,7 +2,7 @@ import imaplib
 import email
 from email.header import decode_header
 from bs4 import BeautifulSoup
-import os
+from config import get_required_env
 
 IMAP_SERVER = "imap.gmail.com"
 
@@ -21,16 +21,50 @@ def clean_text(text):
 
 LABEL_PROCESSED = "AXIOS_PROCESSED"
 LABEL_FAILED = "AXIOS_FAILED"
+LABEL_PROCESSING = "AXIOS_PROCESSING"
+
+
+def _store_label(mail, email_id, operation, label):
+    status, _ = mail.store(email_id, operation, label)
+    if status != "OK":
+        raise RuntimeError(f"Could not update Gmail label {label} for message {email_id!r}")
+
+
+def _decode_part(part):
+    payload = part.get_payload(decode=True) or b""
+    charset = part.get_content_charset() or "utf-8"
+    try:
+        return payload.decode(charset, errors="replace")
+    except LookupError:
+        return payload.decode("utf-8", errors="replace")
 
 def mark_as_processed(mail, email_id):
-    mail.store(email_id, '+X-GM-LABELS', LABEL_PROCESSED)
+    _store_label(mail, email_id, "+X-GM-LABELS", LABEL_PROCESSED)
+    _store_label(mail, email_id, "-X-GM-LABELS", LABEL_PROCESSING)
 
 def mark_as_failed(mail, email_id):
-    mail.store(email_id, '+X-GM-LABELS', LABEL_FAILED)
+    _store_label(mail, email_id, "+X-GM-LABELS", LABEL_FAILED)
+    _store_label(mail, email_id, "-X-GM-LABELS", LABEL_PROCESSING)
 
-def get_latest_axios_email():
-    user = os.getenv("EMAIL_USER")
-    password = os.getenv("EMAIL_PASS").strip()
+
+def mark_as_processing(mail, email_id):
+    _store_label(mail, email_id, "+X-GM-LABELS", LABEL_PROCESSING)
+
+
+def close_mail(mail):
+    try:
+        mail.close()
+    except imaplib.IMAP4.error:
+        pass
+    finally:
+        try:
+            mail.logout()
+        except imaplib.IMAP4.error:
+            pass
+
+def get_latest_axios_email(user=None, password=None):
+    user = user or get_required_env("EMAIL_USER")
+    password = password or get_required_env("EMAIL_PASS")
 
     mail = imaplib.IMAP4_SSL(IMAP_SERVER)
     mail.login(user, password)
@@ -43,6 +77,7 @@ def get_latest_axios_email():
 
     if not email_ids:
         print("❌ Axios 메일 없음")
+        close_mail(mail)
         return None
 
     latest_email_id = None
@@ -58,7 +93,7 @@ def get_latest_axios_email():
         labels = str(msg_data[0])
 
         # ✅ 이미 처리된 메일이면 skip
-        if LABEL_PROCESSED in labels:
+        if any(label in labels for label in (LABEL_PROCESSED, LABEL_FAILED, LABEL_PROCESSING)):
             continue
 
         # 👉 처리할 메일 발견
@@ -67,6 +102,7 @@ def get_latest_axios_email():
 
     if latest_email_id is None:
         print("⏭️ 처리할 새 메일 없음")
+        close_mail(mail)
         return None
 
     # 📩 메일 내용 가져오기
@@ -75,39 +111,41 @@ def get_latest_axios_email():
     raw_email = msg_data[0][1]
     msg = email.message_from_bytes(raw_email)
 
-    subject, encoding = decode_header(msg["Subject"])[0]
-    if isinstance(subject, bytes):
-        subject = subject.decode(encoding or "utf-8")
+    subject_parts = decode_header(msg.get("Subject", ""))
+    subject = "".join(
+        value.decode(encoding or "utf-8", errors="replace") if isinstance(value, bytes) else value
+        for value, encoding in subject_parts
+    )
 
-    body = ""
-    link = None
+    text_parts = []
+    html_parts = []
     
     if msg.is_multipart():
         for part in msg.walk():
             content_type = part.get_content_type()
-            if content_type == "text/html":
-                html = part.get_payload(decode=True).decode(errors="ignore")
-                soup = BeautifulSoup(html, "html.parser")
-                
-                # 본문 텍스트
-                body = soup.get_text()
-
-                # 첫 번째 링크 추출
-                link = None
-
-                view_link = soup.find(
-                    "a",
-                    string=lambda text: text and "view" in text.lower() and "browser" in text.lower()
-                )
-
-                if view_link:
-                    link = view_link.get("href")
-                else:
-                    a_tag = soup.find("a", href=True)
-                    if a_tag:
-                        link = a_tag["href"]
+            if part.get_content_disposition() == "attachment":
+                continue
+            if content_type == "text/plain":
+                text_parts.append(_decode_part(part))
+            elif content_type == "text/html":
+                html_parts.append(_decode_part(part))
     else:
-        body = msg.get_payload(decode=True).decode(errors="ignore")
+        if msg.get_content_type() == "text/html":
+            html_parts.append(_decode_part(msg))
+        else:
+            text_parts.append(_decode_part(msg))
+
+    link = None
+    if html_parts:
+        soup = BeautifulSoup(html_parts[0], "html.parser")
+        body = soup.get_text("\n")
+        view_link = soup.find(
+            "a", string=lambda value: value and "view" in value.lower() and "browser" in value.lower()
+        )
+        if view_link and view_link.get("href", "").startswith(("https://", "http://")):
+            link = view_link["href"]
+    else:
+        body = "\n".join(text_parts)
 
     body = clean_text(body)
 

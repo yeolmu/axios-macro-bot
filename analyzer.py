@@ -1,9 +1,11 @@
-import os
 from openai import OpenAI
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from config import get_required_env
 
 def analyze(text):
+    if not text or not text.strip():
+        raise ValueError("Newsletter body is empty")
+
+    client = OpenAI(api_key=get_required_env("OPENAI_API_KEY"))
 
     # 문장 단위 분리
     sentences = text.split(". ")
@@ -97,6 +99,7 @@ Source article (process this):
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
+        temperature=0.2,
         messages=[{"role": "user", "content": prompt}],
     )
 
