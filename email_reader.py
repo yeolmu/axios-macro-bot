@@ -41,6 +41,7 @@ def _decode_part(part):
 def mark_as_processed(mail, email_id):
     _store_label(mail, email_id, "+X-GM-LABELS", LABEL_PROCESSED)
     _store_label(mail, email_id, "-X-GM-LABELS", LABEL_PROCESSING)
+    _store_label(mail, email_id, "-X-GM-LABELS", LABEL_FAILED)
 
 def mark_as_failed(mail, email_id):
     _store_label(mail, email_id, "+X-GM-LABELS", LABEL_FAILED)
@@ -62,7 +63,7 @@ def close_mail(mail):
         except imaplib.IMAP4.error:
             pass
 
-def get_latest_axios_email(user=None, password=None):
+def get_latest_axios_email(user=None, password=None, include_failed=False, excluded_ids=None):
     user = user or get_required_env("EMAIL_USER")
     password = password or get_required_env("EMAIL_PASS")
 
@@ -83,7 +84,10 @@ def get_latest_axios_email(user=None, password=None):
     latest_email_id = None
 
         # ✅ 최신 메일부터 역순으로 검사
+    excluded_ids = excluded_ids or set()
     for email_id in reversed(email_ids):
+        if email_id in excluded_ids:
+            continue
         # 라벨 / 플래그 확인
         status, msg_data = mail.fetch(email_id, "(X-GM-LABELS)")
 
@@ -93,7 +97,10 @@ def get_latest_axios_email(user=None, password=None):
         labels = str(msg_data[0])
 
         # ✅ 이미 처리된 메일이면 skip
-        if any(label in labels for label in (LABEL_PROCESSED, LABEL_FAILED, LABEL_PROCESSING)):
+        skip_labels = (LABEL_PROCESSED, LABEL_PROCESSING)
+        if not include_failed:
+            skip_labels += (LABEL_FAILED,)
+        if any(label in labels for label in skip_labels):
             continue
 
         # 👉 처리할 메일 발견

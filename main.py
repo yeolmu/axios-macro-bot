@@ -1,4 +1,5 @@
 import html
+import os
 import re
 import smtplib
 from datetime import datetime
@@ -129,38 +130,47 @@ def main():
     sender_email = get_required_env("EMAIL_USER")
     sender_password = get_required_env("EMAIL_PASS")
     receiver_email = get_required_env("RECEIVER_EMAIL")
-    result = get_latest_axios_email(sender_email, sender_password)
+    retry_failed = os.getenv("RETRY_FAILED", "false").lower() == "true"
+    attempted_ids = set()
 
-    if result is None:
-        print("No email to process")
-        return
-
-    subject, text, link, mail, email_id = result
-
-    sent = False
-    try:
-        mark_as_processing(mail, email_id)
-        analysis = analyze(text)
-        send_email(
-            analysis, link if link else "링크 없음", subject,
-            sender_email, sender_password, receiver_email,
+    while True:
+        result = get_latest_axios_email(
+            sender_email,
+            sender_password,
+            include_failed=retry_failed,
+            excluded_ids=attempted_ids,
         )
-        sent = True
 
-        print("✅ 메일 발송 완료:", email_id)
-        # ✅ 성공 → 처리 완료 라벨
-        mark_as_processed(mail, email_id)
+        if result is None:
+            print("No email to process")
+            return
 
-        print("✅ 라벨 적용 완료:", email_id)
+        subject, text, link, mail, email_id = result
+        attempted_ids.add(email_id)
+        sent = False
+        try:
+            mark_as_processing(mail, email_id)
+            analysis = analyze(text)
+            send_email(
+                analysis, link if link else "링크 없음", subject,
+                sender_email, sender_password, receiver_email,
+            )
+            sent = True
 
-    except Exception as e:
-        print("❌ 처리 실패:", e)
-        if not sent:
-            mark_as_failed(mail, email_id)
-        else:
-            print("⚠️ 메일은 발송됐지만 완료 라벨 처리에 실패했습니다. 중복 발송 방지를 위해 AXIOS_PROCESSING 라벨을 유지합니다.")
-    finally:
-        close_mail(mail)
+            print("✅ 메일 발송 완료:", email_id)
+            mark_as_processed(mail, email_id)
+            print("✅ 라벨 적용 완료:", email_id)
+        except Exception as e:
+            print("❌ 처리 실패:", e)
+            if not sent:
+                mark_as_failed(mail, email_id)
+            else:
+                print("⚠️ 메일은 발송됐지만 완료 라벨 처리에 실패했습니다. 중복 발송 방지를 위해 AXIOS_PROCESSING 라벨을 유지합니다.")
+        finally:
+            close_mail(mail)
+
+        if not retry_failed:
+            return
 
 if __name__ == "__main__":
     main()

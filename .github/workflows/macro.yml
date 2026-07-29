@@ -3,7 +3,13 @@ name: Axios Macro Bot
 on:
   schedule:
     - cron: "30 23 * * *"
-  workflow_dispatch:       # 수동 실행 버튼
+  workflow_dispatch:
+    inputs:
+      retry_failed:
+        description: "Retry all AXIOS_FAILED messages"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   run-bot:
@@ -32,5 +38,6 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+          RETRY_FAILED: ${{ inputs.retry_failed || 'false' }}
         run: |
           python main.py
