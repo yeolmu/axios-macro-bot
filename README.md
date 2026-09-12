@@ -89,6 +89,8 @@ python -m compileall -q analyzer.py config.py email_reader.py main.py tests
 
 ### 인증과 실행
 
+Semafor 요약 모델은 지침 준수를 위해 `gpt-4.1-2025-04-14`로 고정합니다.
+Axios의 모델 설정은 변경하지 않습니다.
 기존 `OPENAI_API_KEY`를 사용합니다. `EMAIL_PASS`가 부계정 앱 비밀번호라면 그대로
 재사용하고, 다른 계정이면 `SEMAFOR_EMAIL_PASS` repository secret을 별도로 설정합니다.
 계정은 `SEMAFOR_EMAIL_USER`로 지정하며 Actions에는 위 부계정이 고정되어 있습니다.

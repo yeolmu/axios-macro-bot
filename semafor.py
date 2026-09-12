@@ -185,7 +185,7 @@ def analyze_sources(sources):
         raise ValueError("Source batch too large; review rather than silently truncate")
     client = OpenAI(api_key=get_required_env("OPENAI_API_KEY"))
     response = client.chat.completions.create(
-        model="gpt-4o-mini", temperature=0.2, max_tokens=3500,
+        model="gpt-4.1-2025-04-14", temperature=0.2, max_tokens=3500,
         response_format={"type": "json_object"},
         messages=[{"role": "system", "content": INSTRUCTIONS},
                   {"role": "user", "content": json.dumps(sources, ensure_ascii=False)}],
