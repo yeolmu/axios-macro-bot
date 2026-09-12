@@ -36,10 +36,17 @@ Semafor Flagship와 Washington DC의 같은 날 원문을 통합해 한국어로
 광고·협찬·구독 안내·문화/스포츠/오락 단신·반복 부록은 제외한다.
 두 뉴스레터의 중복 주제는 한 섹션으로 병합하고 같은 사실을 반복하지 않는다.
 국제정세·미국 정치·AI·산업·경제를 우선하며 매일 원문에 따라 제목을 바꾼다.
+원문의 나열 순서에 끌리지 말고 정책·시장·기술의 실질적 변화를 먼저 선정한다.
+단순 행사 참석·기념일 일정은 주요 AI·반도체·시장 뉴스를 밀어내지 않게 생략하거나
+마지막 정치·산업 단신 섹션으로 묶는다. 핵심 수치와 쟁점을 버리고 추상적인 제목만 남기지 않는다.
+주요 주제 4개와 관련 정치·산업 단신 1개 구성을 우선 검토하되 원문이 뒷받침할 때만 쓴다.
 수치·단위·주체·시점·불확실성·인과관계를 보존하고 원문 밖 사실/해석은 추가하지 않는다.
+발표 예정인 지표는 반드시 '발표 예정'으로, 검토 중인 법안은 '검토 중'으로 표시한다.
+원문의 금리 전망을 지표 발표 결과로 바꾸지 않는다. 추모 행사는 '추모'로 번역한다.
 각 bullet은 120자 이하, 하위 bullet도 120자 이하, 전체 본문은 1800자 이하로 압축한다.
 출력은 JSON 객체만: {"sections":[{"title":"주제 제목","bullets":[
-{"text":"핵심 사실","details":["필요한 세부 사실"],"sources":["s1"]}]}]}.
+{"text":"핵심 사실","details":["필요한 세부 사실"],"sources":["s1"]},
+{"text":"같은 주제의 별도 핵심 쟁점","details":[],"sources":["s2"]}]}]}.
 details는 0~2개, sources는 해당 사실을 뒷받침하는 입력 source id를 1개 이상 명시한다.
 출처 URL은 생성하지 않는다. links에 주어진 원문 링크는 프로그램이 별도로 첨부한다.
 """
@@ -177,16 +184,32 @@ def analyze_sources(sources):
     if sum(len(s["text"]) for s in sources) > 180000:
         raise ValueError("Source batch too large; review rather than silently truncate")
     client = OpenAI(api_key=get_required_env("OPENAI_API_KEY"))
-    response = client.chat.completions.create(
-        model="gpt-4o-mini", temperature=0.2, max_tokens=3500,
-        response_format={"type": "json_object"},
-        messages=[{"role": "system", "content": INSTRUCTIONS},
-                  {"role": "user", "content": json.dumps(sources, ensure_ascii=False)}],
-    )
-    choice = response.choices[0]
-    if choice.finish_reason != "stop":
-        raise ValueError("Incomplete Semafor generation")
-    return validate_digest(json.loads(choice.message.content), sources)
+    messages = [{"role": "system", "content": INSTRUCTIONS},
+                {"role": "user", "content": json.dumps(sources, ensure_ascii=False)}]
+    for review in (False, True):
+        response = client.chat.completions.create(
+            model="gpt-4.1-2025-04-14", temperature=0.2, max_tokens=3500,
+            response_format={"type": "json_object"}, messages=messages.copy(),
+        )
+        choice = response.choices[0]
+        if choice.finish_reason != "stop":
+            raise ValueError("Incomplete Semafor generation")
+        result = validate_digest(json.loads(choice.message.content), sources)
+        if not review:
+            messages += [
+                {"role": "assistant", "content": choice.message.content},
+                {"role": "user", "content": (
+                    "위 초안을 원문과 대조하여 최소 수정한 최종 JSON만 출력하라. "
+                    "모든 bullet의 행위 주체·수치·시점·불확실성을 확인하라. "
+                    "검토 중인 제안을 발표/시행 완료로 바꾸거나, 예정된 행사를 이미 참석한 것으로 쓰지 마라. "
+                    "지표를 참고하는 기관을 지표 발표 주체로 바꾸지 마라. "
+                    "잠재적 비용 우위와 확정된 우위를 구분하라. "
+                    "모호한 주어는 명시하고 원문 근거 없는 단정은 삭제/완화하라. "
+                    "동일 사실의 반복을 없애고 정치·산업 관련 법안 외 문화·스포츠 소식은 제외하라. "
+                    "주요 4개 주제와 마지막 단신, compact bullet 형식과 sources를 유지하라."
+                )},
+            ]
+    return result
 
 
 def build_message(digest, sources, target):
