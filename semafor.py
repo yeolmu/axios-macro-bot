@@ -184,16 +184,32 @@ def analyze_sources(sources):
     if sum(len(s["text"]) for s in sources) > 180000:
         raise ValueError("Source batch too large; review rather than silently truncate")
     client = OpenAI(api_key=get_required_env("OPENAI_API_KEY"))
-    response = client.chat.completions.create(
-        model="gpt-4.1-2025-04-14", temperature=0.2, max_tokens=3500,
-        response_format={"type": "json_object"},
-        messages=[{"role": "system", "content": INSTRUCTIONS},
-                  {"role": "user", "content": json.dumps(sources, ensure_ascii=False)}],
-    )
-    choice = response.choices[0]
-    if choice.finish_reason != "stop":
-        raise ValueError("Incomplete Semafor generation")
-    return validate_digest(json.loads(choice.message.content), sources)
+    messages = [{"role": "system", "content": INSTRUCTIONS},
+                {"role": "user", "content": json.dumps(sources, ensure_ascii=False)}]
+    for review in (False, True):
+        response = client.chat.completions.create(
+            model="gpt-4.1-2025-04-14", temperature=0.2, max_tokens=3500,
+            response_format={"type": "json_object"}, messages=messages.copy(),
+        )
+        choice = response.choices[0]
+        if choice.finish_reason != "stop":
+            raise ValueError("Incomplete Semafor generation")
+        result = validate_digest(json.loads(choice.message.content), sources)
+        if not review:
+            messages += [
+                {"role": "assistant", "content": choice.message.content},
+                {"role": "user", "content": (
+                    "위 초안을 원문과 대조하여 최소 수정한 최종 JSON만 출력하라. "
+                    "모든 bullet의 행위 주체·수치·시점·불확실성을 확인하라. "
+                    "검토 중인 제안을 발표/시행 완료로 바꾸거나, 예정된 행사를 이미 참석한 것으로 쓰지 마라. "
+                    "지표를 참고하는 기관을 지표 발표 주체로 바꾸지 마라. "
+                    "잠재적 비용 우위와 확정된 우위를 구분하라. "
+                    "모호한 주어는 명시하고 원문 근거 없는 단정은 삭제/완화하라. "
+                    "동일 사실의 반복을 없애고 정치·산업 관련 법안 외 문화·스포츠 소식은 제외하라. "
+                    "주요 4개 주제와 마지막 단신, compact bullet 형식과 sources를 유지하라."
+                )},
+            ]
+    return result
 
 
 def build_message(digest, sources, target):

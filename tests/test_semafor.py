@@ -106,8 +106,11 @@ class DigestTests(unittest.TestCase):
         choice.finish_reason = "stop"
         choice.message.content = json.dumps(digest())
         self.assertEqual(s.analyze_sources(sources()), digest())
-        args = client.return_value.chat.completions.create.call_args.kwargs
+        create = client.return_value.chat.completions.create
+        self.assertEqual(create.call_count, 2)
+        args = create.call_args_list[0].kwargs
         self.assertEqual(json.loads(args["messages"][1]["content"]), sources())
+        self.assertEqual(create.call_args.kwargs["messages"][-2]["role"], "assistant")
         choice.finish_reason = "length"
         with self.assertRaises(ValueError):
             s.analyze_sources(sources())
