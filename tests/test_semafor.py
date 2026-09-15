@@ -117,6 +117,30 @@ class DigestTests(unittest.TestCase):
             s.analyze_sources(sources())
 
 
+class OutputRepairTests(unittest.TestCase):
+    def response(self, value):
+        return Mock(choices=[Mock(finish_reason="stop", message=Mock(content=json.dumps(value)))])
+
+    def test_invalid_nested_bullets_are_repaired(self):
+        invalid = digest()
+        invalid["sections"][0]["bullets"][0]["details"] = ["one", "two", "three"]
+        client = Mock()
+        create = client.chat.completions.create
+        create.side_effect = [self.response(invalid), self.response(digest())]
+        messages = [{"role": "user", "content": "original sources"}]
+        self.assertEqual(s.generate_valid_digest(client, messages, sources()), digest())
+        self.assertEqual(create.call_count, 2)
+        self.assertIn("Invalid nested bullets", create.call_args.kwargs["messages"][-1]["content"])
+        self.assertEqual(len(messages), 1)
+
+    def test_persistent_invalid_output_stops_after_three_attempts(self):
+        client = Mock()
+        client.chat.completions.create.return_value = self.response({"sections": []})
+        with self.assertRaises(ValueError):
+            s.generate_valid_digest(client, [], sources())
+        self.assertEqual(client.chat.completions.create.call_count, 3)
+
+
 class DeliveryTests(unittest.TestCase):
     def setUp(self):
         self.mail = Mock()

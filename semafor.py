@@ -180,6 +180,34 @@ def validate_digest(value, sources):
     return value
 
 
+def generate_valid_digest(client, messages, sources):
+    """Repair malformed model output before any delivery reservation is made."""
+    context = messages.copy()
+    for attempt in range(3):
+        response = client.chat.completions.create(
+            model="gpt-4.1-2025-04-14", temperature=0.2, max_tokens=3500,
+            response_format={"type": "json_object"}, messages=context.copy(),
+        )
+        choice = response.choices[0]
+        if choice.finish_reason != "stop":
+            raise ValueError("Incomplete Semafor generation")
+        try:
+            return validate_digest(json.loads(choice.message.content), sources)
+        except ValueError as error:
+            if attempt == 2:
+                raise
+            context += [
+                {"role": "assistant", "content": choice.message.content},
+                {"role": "user", "content": (
+                    f"출력 검증 오류: {error}. 원문 근거를 유지하며 JSON 형식과 분량을 수정하라. "
+                    "sections는 1~5개, 각 bullets는 1~3개, 각 details는 반드시 문자열 배열 0~2개. "
+                    "text와 details 각 문장은 120자 이하, 제목은 70자 이하, 전체 1800자 이하. "
+                    "sources에는 입력 source id를 1개 이상 사용하고 중복 문장은 병합하라. "
+                    "설명 없이 수정한 전체 JSON 객체만 출력하라."
+                )},
+            ]
+
+
 def analyze_sources(sources):
     if sum(len(s["text"]) for s in sources) > 180000:
         raise ValueError("Source batch too large; review rather than silently truncate")
@@ -187,17 +215,10 @@ def analyze_sources(sources):
     messages = [{"role": "system", "content": INSTRUCTIONS},
                 {"role": "user", "content": json.dumps(sources, ensure_ascii=False)}]
     for review in (False, True):
-        response = client.chat.completions.create(
-            model="gpt-4.1-2025-04-14", temperature=0.2, max_tokens=3500,
-            response_format={"type": "json_object"}, messages=messages.copy(),
-        )
-        choice = response.choices[0]
-        if choice.finish_reason != "stop":
-            raise ValueError("Incomplete Semafor generation")
-        result = validate_digest(json.loads(choice.message.content), sources)
+        result = generate_valid_digest(client, messages, sources)
         if not review:
             messages += [
-                {"role": "assistant", "content": choice.message.content},
+                {"role": "assistant", "content": json.dumps(result, ensure_ascii=False)},
                 {"role": "user", "content": (
                     "위 초안을 원문과 대조하여 최소 수정한 최종 JSON만 출력하라. "
                     "모든 bullet의 행위 주체·수치·시점·불확실성을 확인하라. "
