@@ -41,10 +41,12 @@ jobs:
           SEMAFOR_EMAIL_USER: sub.seounyeol@gmail.com
           SEMAFOR_EMAIL_PASS: ${{ secrets.SEMAFOR_EMAIL_PASS }}
           DIGEST_DATE: ${{ inputs.digest_date }}
+          EVENT_NAME: ${{ github.event_name }}
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
         shell: bash
         run: |
           args=()
+          if [[ "$EVENT_NAME" == "schedule" ]]; then args+=(--scheduled); fi
           if [[ -n "$DIGEST_DATE" ]]; then args+=(--date "$DIGEST_DATE"); fi
           if [[ "$DRY_RUN" == "true" ]]; then args+=(--dry-run --output semafor-preview.eml); fi
           python semafor.py "${args[@]}"

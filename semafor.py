@@ -216,7 +216,7 @@ def build_message(digest, sources, target):
     validate_digest(digest, sources)
     msg = EmailMessage()
     msg["Subject"] = f"🟡 Semafor 요약 · {target.isoformat()}"
-    msg["From"] = f"Semafor Daily Brief <{SOURCE_ACCOUNT}>"
+    msg["From"] = f"Macro Gorilla <{SOURCE_ACCOUNT}>"
     msg["To"] = RECIPIENT
     msg["Date"] = format_datetime(datetime.now(KST))
     msg["Message-ID"] = f"<semafor-daily-{target.isoformat()}@sub.seounyeol.gmail.com>"
@@ -311,15 +311,32 @@ def run(target, dry_run=False, output=None):
             pass
 
 
+def scheduled_date(now=None):
+    """Latest weekday 23:30 KST slot, even if Actions starts after midnight."""
+    local = (now or datetime.now(KST)).astimezone(KST)
+    target = local.date()
+    if (local.hour, local.minute) < (23, 30):
+        target -= timedelta(days=1)
+    while target.weekday() >= 5:
+        target -= timedelta(days=1)
+    return target
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--date", type=date.fromisoformat, default=datetime.now(KST).date())
+    dates = parser.add_mutually_exclusive_group()
+    dates.add_argument("--date", type=date.fromisoformat)
+    dates.add_argument("--scheduled", action="store_true", help="Use latest weekday 23:30 KST slot")
     parser.add_argument("--dry-run", action="store_true", help="Analyze only; no send or Gmail mutation")
     parser.add_argument("--output", help="Local .eml preview path (dry-run only)")
     args = parser.parse_args()
     if args.output and not args.dry_run:
         parser.error("--output requires --dry-run")
-    print(run(args.date, args.dry_run, args.output))
+    target = scheduled_date() if args.scheduled else (args.date or datetime.now(KST).date())
+    result = run(target, args.dry_run, args.output)
+    print(f"{target}: {result}", flush=True)
+    if args.scheduled and result == "no_sources":
+        raise RuntimeError(f"No Semafor sources for scheduled date {target}; digest not sent")
 
 
 if __name__ == "__main__":

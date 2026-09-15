@@ -92,6 +92,7 @@ class DigestTests(unittest.TestCase):
         candidate["sections"][0]["title"] = "<script>x</script>"
         msg = s.build_message(candidate, sources(), DAY)
         self.assertEqual(msg["To"], s.RECIPIENT)
+        self.assertEqual(msg["From"], f"Macro Gorilla <{s.SOURCE_ACCOUNT}>")
         markup = msg.get_body(preferencelist=("html",)).get_content()
         self.assertIn("&lt;script&gt;", markup)
         self.assertNotIn("<script>", markup)
@@ -159,6 +160,37 @@ class DeliveryTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             s.deliver(self.mail, "pw", "message", DAY)
         self.smtp.send_message.assert_not_called()
+
+
+class ScheduleTests(unittest.TestCase):
+    def test_delayed_weekday_and_weekend_slots(self):
+        cases = [
+            ("2026-09-14T14:30:00+00:00", "2026-09-14"),
+            ("2026-09-14T19:31:15+00:00", "2026-09-14"),
+            ("2026-09-15T14:29:59+00:00", "2026-09-14"),
+            ("2026-09-15T14:30:00+00:00", "2026-09-15"),
+            ("2026-09-18T19:31:15+00:00", "2026-09-18"),
+            ("2026-09-20T01:00:00+00:00", "2026-09-18"),
+        ]
+        for stamp, expected in cases:
+            with self.subTest(stamp=stamp):
+                self.assertEqual(s.scheduled_date(datetime.fromisoformat(stamp)), date.fromisoformat(expected))
+
+    @patch("sys.argv", ["semafor.py", "--scheduled"])
+    @patch.object(s, "scheduled_date", return_value=DAY)
+    @patch.object(s, "run", return_value="no_sources")
+    def test_empty_scheduled_run_is_not_success(self, run, scheduled_date):
+        with self.assertRaisesRegex(RuntimeError, "digest not sent"):
+            s.main()
+        run.assert_called_once_with(DAY, False, None)
+
+    @patch("sys.argv", ["semafor.py", "--date", "2026-09-14"])
+    @patch.object(s, "scheduled_date")
+    @patch.object(s, "run", return_value="already_reserved")
+    def test_explicit_recovery_date_keeps_duplicate_guard(self, run, scheduled_date):
+        s.main()
+        run.assert_called_once_with(date(2026, 9, 14), False, None)
+        scheduled_date.assert_not_called()
 
 
 class RunTests(unittest.TestCase):
