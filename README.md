@@ -72,7 +72,13 @@ python -m compileall -q analyzer.py config.py email_reader.py main.py tests
 - 수신 계정: `sub.seounyeol@gmail.com`
 - 대상 발신자: `flagship@semafor.com`, `washingtondc@semafor.com`
 - 받는 사람: `seounyeol@gmail.com`
+- 발신인 표시명: `Macro Gorilla`
 - 예약: 한국 시간 월~금 23:30(UTC 14:30). Actions 예약은 지연될 수 있습니다.
+- 예약 실행은 `--scheduled`로 가장 최근 평일 23:30 회차를 선택합니다. 예를 들어
+  월요일 작업이 화요일 04:31에 시작돼도 월요일분을 조회합니다. 금요일 작업이 토요일에
+  시작된 경우에도 금요일분을 조회합니다. 대상 날짜와 발송 상태를 함께 로그에 남깁니다.
+  해당 회차 원문이 전혀 없으면 예약 작업은 실패로 표시하여 미발송을 숨기지 않습니다.
+  다음 평일 회차까지 통째로 누락된 작업은 `--date`로 해당 날짜를 명시해 복구합니다.
 - 날짜: **Gmail 수신 시각의 한국 날짜**가 같은 메일만 통합합니다. 읽음/보관 여부와
   무관하게 Gmail 전체보관함을 검색합니다. 스팸·휴지통은 포함하지 않습니다.
 - 실행 시점까지 도착한 당일분을 한 통으로 발송합니다. 발송 이후 도착한 메일은
