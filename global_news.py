@@ -101,6 +101,8 @@ def parse_source(raw, received, target):
     subject = str(make_header(decode_header(msg.get("Subject", ""))))
     if re.search(r"welcome|confirm|sign.?in|subscription|opt.?in|구독.*(?:확인|완료)|인증|환영|가입", subject, re.I):
         return None
+    if kind == "뉴닉" and re.search(r"뉴닉 사용법|뉴니커, 만나서 반갑슴", subject):
+        return None
     plain, markup = [], []
     for part in msg.walk():
         if part.get_content_disposition() == "attachment":
