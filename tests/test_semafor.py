@@ -100,6 +100,20 @@ class DigestTests(unittest.TestCase):
         for source in sources():
             self.assertIn(source["links"][0], markup)
 
+    def test_single_edition_message_discloses_missing_source(self):
+        for available in [sources()[:1], sources()[1:]]:
+            with self.subTest(kind=available[0]["kind"]):
+                candidate = digest()
+                candidate["sections"][0]["bullets"][0]["sources"] = [available[0]["id"]]
+                msg = s.build_message(candidate, available, DAY)
+                missing = next(kind for kind in s.SENDERS.values() if kind != available[0]["kind"])
+                for part in [msg.get_body(preferencelist=("plain",)), msg.get_body(preferencelist=("html",))]:
+                    text = part.get_content()
+                    self.assertIn(f"{DAY} · {available[0]['kind']}", text)
+                    self.assertIn(f"미수신 뉴스레터: {missing}", text)
+                    self.assertNotIn("Flagship + Washington DC", text)
+                    self.assertIn(available[0]["links"][0], text)
+
     @patch.dict(os.environ, {"OPENAI_API_KEY": "test"})
     @patch.object(s, "OpenAI")
     def test_model_gets_combined_sources_and_rejects_truncation(self, client):
@@ -233,11 +247,24 @@ class RunTests(unittest.TestCase):
         mail.create.assert_not_called()
         collect.return_value = sources()[:1]
         analyze.reset_mock()
-        with self.assertRaisesRegex(RuntimeError, "Incomplete"):
-            s.run(DAY)
+        single_digest = digest()
+        single_digest["sections"][0]["bullets"][0]["sources"] = ["s1"]
+        analyze.return_value = single_digest
+        self.assertEqual(s.run(DAY, dry_run=True), "dry_run_ready")
+        analyze.assert_called_once_with(sources()[:1])
+        deliver.assert_not_called()
+        mail.create.assert_not_called()
+        mail.logout.assert_called()
+        deliver.return_value = "sent"
+        self.assertEqual(s.run(DAY), "sent")
+        self.assertIn("미수신 뉴스레터: Washington DC", deliver.call_args.args[2].get_body(preferencelist=("plain",)).get_content())
+        deliver.assert_called_once()
+        collect.return_value = []
+        analyze.reset_mock()
+        deliver.reset_mock()
+        self.assertEqual(s.run(DAY), "no_sources")
         analyze.assert_not_called()
         deliver.assert_not_called()
-        mail.logout.assert_called()
 
     @patch.object(s.imaplib, "IMAP4_SSL")
     def test_weekend_no_network(self, connect):
