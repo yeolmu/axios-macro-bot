@@ -85,8 +85,12 @@ jobs:
           ' .agent-run.json
           gh run view "$RUN_ID" --log-failed > .agent-failure.log
           test -s .agent-failure.log
-          tail -n 300 .agent-failure.log | head -c 35000 > .agent-failure-short.log
-          mv .agent-failure-short.log .agent-failure.log
+          python - <<'PY'
+          from pathlib import Path
+          log_path = Path(".agent-failure.log")
+          lines = log_path.read_text(errors="replace").splitlines()
+          log_path.write_text("\n".join(lines[-300:])[-35000:] + "\n")
+          PY
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -102,6 +106,7 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           permission-profile: ":workspace"
           allow-bots: true
+          output-file: agent-report.md
           prompt: |
             You are a conservative maintenance agent for this private Python repository.
             The failed run metadata is in .agent-run.json, and its failed-step logs
@@ -127,7 +132,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .agent-run.json .agent-failure.log
+          if [[ -f agent-report.md ]]; then
+            cp agent-report.md "$RUNNER_TEMP/auto-fix-report.md"
+          else
+            echo "Codex did not produce a report." > "$RUNNER_TEMP/auto-fix-report.md"
+          fi
+          rm -f .agent-run.json .agent-failure.log agent-report.md
+          {
+            echo "### GitHub Auto-Fix Agent"
+            echo "Source run: https://github.com/$GITHUB_REPOSITORY/actions/runs/${{ steps.context.outputs.run_id }}"
+            echo ""
+            cat "$RUNNER_TEMP/auto-fix-report.md"
+          } >> "$GITHUB_STEP_SUMMARY"
           python - <<'PY'
           import re
           import subprocess
@@ -146,7 +162,7 @@ jobs:
               sys.exit("Refusing changes outside Python source/tests: " + repr(unexpected))
           PY
           python -m unittest discover -s tests
-          git add -- '*.py'
+          git add -- '*.py' 'tests/*.py'
           if git diff --cached --quiet; then
             echo "has_patch=false" >> "$GITHUB_OUTPUT"
             echo "No verified code fix; no PR will be created."
@@ -155,6 +171,15 @@ jobs:
           git diff --cached --check
           git diff --cached --binary > agent-fix.patch
           echo "has_patch=true" >> "$GITHUB_OUTPUT"
+
+      - name: Export diagnosis report
+        if: always() && steps.context.outputs.run_id != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-fix-report-${{ steps.context.outputs.run_id }}
+          path: ${{ runner.temp }}/auto-fix-report.md
+          retention-days: 3
+          if-no-files-found: ignore
 
       - name: Export verified patch
         if: steps.patch.outputs.has_patch == 'true'
