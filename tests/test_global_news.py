@@ -33,6 +33,13 @@ class GlobalNewsTests(unittest.TestCase):
         for subject in ["Nature Briefing Daily - Opt-in request", "Welcome to Nature", "뉴닉 구독 완료"]:
             self.assertIsNone(g.parse_source(raw("briefing@nature.com", subject), stamp, DAY))
 
+    def test_newneek_onboarding_excluded(self):
+        stamp = datetime.fromisoformat("2026-10-13T22:22:00+09:00")
+        for subject in ["🦔뉴닉 사용법, 이건 꼭 알아야 해요! (feat. 뉴닉 활용 꿀팁.zip)",
+                        "🦔[혜택 있음] 뉴니커, 만나서 반갑슴!"]:
+            self.assertIsNone(g.parse_source(raw("whatsup@newneek.co", subject), stamp, DAY))
+        self.assertIsNotNone(g.parse_source(raw("whatsup@newneek.co", "오늘의 주요 뉴스"), stamp, DAY))
+
     def test_exact_cutoff_and_next_day_carry(self):
         for stamp, included in [("2026-10-12T23:29:59+09:00", False),
                                 ("2026-10-12T23:30:00+09:00", True),
