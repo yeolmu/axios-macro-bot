@@ -35,8 +35,11 @@ def receipt_window(target):
     previous = target - timedelta(days=1)
     while previous.weekday() >= 5:
         previous -= timedelta(days=1)
-    return (datetime.combine(previous, datetime.min.time(), KST).replace(hour=23, minute=30),
-            datetime.combine(target, datetime.min.time(), KST).replace(hour=23, minute=30))
+    start = datetime.combine(previous, datetime.min.time(), KST).replace(hour=8, minute=10)
+    # Last old-schedule digest was Oct 13; bridge the unsent interval once.
+    if target == date(2026, 10, 15):
+        start = datetime(2026, 10, 13, 23, 30, tzinfo=KST)
+    return (start, datetime.combine(target, datetime.min.time(), KST).replace(hour=8, minute=10))
 
 
 def source_kind(address):
@@ -58,6 +61,7 @@ Axios Macro는 별도 발송되므로 일반 금리·고용·시장 해설보다
 가능하면 미국 정치 / 한국 정치·사회 / 글로벌 지정학 / 과학 / 기술로 구분하되,
 원문이 없는 분야는 억지로 채우지 않고 중요도와 뉴스에 맞게 제목과 섹션 수를 조정한다.
 AI와 빅테크 소식이 기초과학·우주·생명·환경의 중요한 발견을 밀어내지 않게 선정한다.
+모든 입력 매체에서 최소 한 가지 중요한 내용을 본문에 반영하고 해당 source id를 인용한다.
 같은 사건은 출처를 병합한다. 각 항목에서 무슨 일이 있었는지와 핵심 배경/쟁점을 간결히 설명한다.
 사실, 당사자의 주장, 원문 저자의 해석을 구분하고 논쟁의 입장은 발언 주체를 명시한다.
 확인된 사건과 계획·전망·혐의·미검증 주장을 혼동하지 않는다.
@@ -208,6 +212,11 @@ def validate_digest(value, sources):
                 total += len(text)
     if total > 1800:
         raise ValueError("Semafor digest exceeds compact limit")
+    referenced = {ref for section in sections for bullet in section["bullets"] for ref in bullet["sources"]}
+    used_kinds = {source["kind"] for source in sources if source["id"] in referenced}
+    missing_kinds = {source["kind"] for source in sources} - used_kinds
+    if missing_kinds:
+        raise ValueError("Digest omitted source kinds: " + ", ".join(sorted(missing_kinds)))
     return value
 
 
@@ -360,7 +369,7 @@ def run(target, dry_run=False, output=None):
             return "no_sources"
         missing = set(EXPECTED_SOURCES) - {s["kind"] for s in sources}
         if missing:
-            print(f"{target}: missing editions: {', '.join(sorted(missing))}; summarizing available sources", flush=True)
+            raise RuntimeError(f"{target}: incomplete batch, waiting for: {', '.join(sorted(missing))}; digest not sent")
         message = build_message(analyze_sources(sources), sources, target)
         if dry_run:
             if output:
@@ -375,10 +384,10 @@ def run(target, dry_run=False, output=None):
 
 
 def scheduled_date(now=None):
-    """Latest weekday 23:30 KST slot, even if Actions starts after midnight."""
+    """Latest weekday 08:10 KST slot, even if Actions starts after midnight."""
     local = (now or datetime.now(KST)).astimezone(KST)
     target = local.date()
-    if (local.hour, local.minute) < (23, 30):
+    if (local.hour, local.minute) < (8, 10):
         target -= timedelta(days=1)
     while target.weekday() >= 5:
         target -= timedelta(days=1)
@@ -389,7 +398,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     dates = parser.add_mutually_exclusive_group()
     dates.add_argument("--date", type=date.fromisoformat)
-    dates.add_argument("--scheduled", action="store_true", help="Use latest weekday 23:30 KST slot")
+    dates.add_argument("--scheduled", action="store_true", help="Use latest weekday 08:10 KST slot")
     parser.add_argument("--dry-run", action="store_true", help="Analyze only; no send or Gmail mutation")
     parser.add_argument("--output", help="Local .eml preview path (dry-run only)")
     args = parser.parse_args()

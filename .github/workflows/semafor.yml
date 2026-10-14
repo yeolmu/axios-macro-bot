@@ -7,8 +7,8 @@ on:
       - 'tests/test_global_news.py'
       - '.github/workflows/semafor.yml'
   schedule:
-    # Previous weekday cutoff to current cutoff, weekdays at 23:30 KST.
-    - cron: "30 14 * * 1-5"
+    # Previous weekday cutoff to current cutoff, weekdays at 08:10 KST (Sunday-Thursday UTC).
+    - cron: "10 23 * * 0-4"
   workflow_dispatch:
     inputs:
       digest_date:
