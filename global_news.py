@@ -369,7 +369,7 @@ def run(target, dry_run=False, output=None):
             return "no_sources"
         missing = set(EXPECTED_SOURCES) - {s["kind"] for s in sources}
         if missing:
-            raise RuntimeError(f"{target}: incomplete batch, waiting for: {', '.join(sorted(missing))}; digest not sent")
+            print(f"{target}: missing editions: {', '.join(sorted(missing))}; summarizing available sources", flush=True)
         message = build_message(analyze_sources(sources), sources, target)
         if dry_run:
             if output:

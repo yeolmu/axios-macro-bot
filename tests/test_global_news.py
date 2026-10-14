@@ -73,21 +73,32 @@ class GlobalNewsTests(unittest.TestCase):
         self.assertNotIn("axios", query)
         mail.select.assert_called_once_with('"[Gmail]/All Mail"', readonly=True)
 
-    def test_complete_batch_required_before_analysis(self):
-        source = {"kind": "Flagship"}
+    def test_partial_batch_sends_and_empty_batch_skips(self):
+        source = g.parse_source(raw("flagship@semafor.com"),
+                                datetime.fromisoformat("2026-10-13T07:00:00+09:00"), DAY)
+        source["id"] = "s1"
+        digest = {"sections": [{"title": "뉴스", "bullets": [
+            {"text": "핵심 뉴스", "details": [], "sources": ["s1"]}]}]}
         mail = Mock()
         mail.login.return_value = ("OK", [])
         with patch.dict(os.environ, {"EMAIL_USER": g.SOURCE_ACCOUNT, "EMAIL_PASS": "test"}), \
              patch.object(g.imaplib, "IMAP4_SSL", return_value=mail), \
              patch.object(g, "already_reserved", return_value=False), \
-             patch.object(g, "collect_sources", return_value=[source]), \
-             patch.object(g, "analyze_sources") as analyze, \
-             patch.object(g, "deliver") as deliver:
-            with self.assertRaisesRegex(RuntimeError, "incomplete batch"):
-                g.run(DAY)
+             patch.object(g, "collect_sources", return_value=[source]) as collect, \
+             patch.object(g, "analyze_sources", return_value=digest) as analyze, \
+             patch.object(g, "deliver", return_value="sent") as deliver:
+            self.assertEqual(g.run(DAY), "sent")
+            analyze.assert_called_once_with([source])
+            deliver.assert_called_once()
+            message = deliver.call_args.args[2].get_body(preferencelist=("plain",)).get_content()
+            self.assertIn("수신되지 않은 뉴스레터", message)
+            self.assertIn("Nature Briefing", message)
+            collect.return_value = []
+            analyze.reset_mock()
+            deliver.reset_mock()
+            self.assertEqual(g.run(DAY), "no_sources")
             analyze.assert_not_called()
             deliver.assert_not_called()
-            mail.create.assert_not_called()
 
     def test_schedule_and_transition(self):
         for stamp, expected in [("2026-10-16T08:09:59+09:00", "2026-10-15"),
