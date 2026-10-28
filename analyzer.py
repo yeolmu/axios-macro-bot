@@ -59,12 +59,20 @@ def analyze(text):
 
     client = OpenAI(api_key=get_required_env("OPENAI_API_KEY"))
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-6-luna",
+        reasoning_effort="none",
         temperature=0.2,
+        max_completion_tokens=6000,
         messages=[
             {"role": "system", "content": BRIEFING_INSTRUCTIONS},
             {"role": "user", "content": text},
         ],
     )
 
-    return response.choices[0].message.content
+    choice = response.choices[0]
+    if choice.finish_reason != "stop":
+        raise ValueError("Incomplete Axios generation")
+    content = choice.message.content
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("Empty Axios generation")
+    return content
