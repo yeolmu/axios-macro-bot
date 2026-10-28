@@ -52,7 +52,7 @@ class ModelRequestTests(unittest.TestCase):
     def test_sol_draft_repair_and_review_use_compatible_options(self):
         sources = [{"id": "s1", "kind": "Flagship", "text": "A bill is proposed."}]
         digest = {"sections": [{"title": "Policy", "bullets": [
-            {"text": "A bill is proposed.", "details": [], "sources": ["s1"]}]}]}
+            {"text": "A bill is proposed.", "details": [], "why_it_matters": "원문에 근거한 영향과 한계를 이해하는 데 필요한 맥락입니다.", "sources": ["s1"]}]}]}
         self.outputs = [("{}", "stop"), (json.dumps(digest), "stop"),
                         (json.dumps(digest), "stop")]
         with patch.object(g, "OpenAI", return_value=self.client):
