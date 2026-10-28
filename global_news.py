@@ -63,6 +63,12 @@ Axios Macro는 별도 발송되므로 일반 금리·고용·시장 해설보다
 AI와 빅테크 소식이 기초과학·우주·생명·환경의 중요한 발견을 밀어내지 않게 선정한다.
 모든 입력 매체에서 최소 한 가지 중요한 내용을 본문에 반영하고 해당 source id를 인용한다.
 같은 사건은 출처를 병합한다. 각 항목에서 무슨 일이 있었는지와 핵심 배경/쟁점을 간결히 설명한다.
+모든 bullet에 why_it_matters를 반드시 넣는다. '왜 중요한가'에 해당하는 짧은 한 문장(120자 이하)이다.
+핵심 사실을 반복하지 말고, 누가 어떤 영향을 받는지 또는 정책·사회·과학적 의미와 맥락을 원문에 근거해 설명한다.
+막연히 '중요하다', '주목할 필요가 있다'로 끝내지 않는다. 경제·투자 의미로 억지로 연결하지 않는다.
+원문의 해석은 발언 주체를 밝히고, 편집상 추론이 필요하면 '해석:'으로 구분하며 원문이 뒷받침하는 범위로 제한한다.
+원문에 없는 사실·영향·예측을 보태지 말고, 근거가 부족하면 원문만으로 파급효과를 판단하기 어렵다고 명시한다.
+why_it_matters에서도 계획과 확정, 상관관계와 인과관계, 동물연구와 인간 효과를 구분한다.
 사실, 당사자의 주장, 원문 저자의 해석을 구분하고 논쟁의 입장은 발언 주체를 명시한다.
 확인된 사건과 계획·전망·혐의·미검증 주장을 혼동하지 않는다.
 과학 연구는 인간/동물/실험실 연구, 상관관계/인과관계, 초기 결과/확립된 지식을 구분한다.
@@ -70,10 +76,10 @@ AI와 빅테크 소식이 기초과학·우주·생명·환경의 중요한 발�
 이전 회차를 제공받지 않았으므로 이전 요약 대비 변화를 지어내지 않는다.
 광고·협찬·구독 안내·행사 홍보·반복 부록은 제외한다.
 오늘의 3줄, 도입부, 결론, 영어 학습, 투자 권유는 넣지 않는다.
-각 bullet과 하위 bullet은 120자 이하, 전체 본문은 1800자 이하.
+각 bullet, 하위 bullet, why_it_matters는 각각 120자 이하. 제목·bullet·하위 bullet·why_it_matters 합계는 1800자 이하.
 출력은 JSON 객체만: {"sections":[{"title":"주제 제목","bullets":[
-{"text":"핵심 사실","details":["필요한 배경 또는 쟁점"],"sources":["s1"]}]}]}.
-sources에는 해당 사실을 뒷받침하는 입력 source id를 1개 이상 명시한다.
+{"text":"핵심 사실","details":["필요한 배경 또는 쟁점"],"why_it_matters":"원문에 근거한 의미와 영향 한 문장","sources":["s1"]}]}]}.
+sources에는 핵심 사실과 why_it_matters를 뒷받침하는 입력 source id를 1개 이상 명시한다.
 출처 URL은 생성하지 않는다. 원문 링크는 프로그램이 별도로 붙인다.
 """
 
@@ -202,7 +208,11 @@ def validate_digest(value, sources):
                 raise ValueError("Invalid nested bullets")
             if not isinstance(refs, list) or not refs or any(r not in valid_ids for r in refs):
                 raise ValueError("Unknown or missing source reference")
-            for text in [bullet.get("text"), *details]:
+            why = bullet.get("why_it_matters")
+            if (not isinstance(why, str) or not why.strip() or len(why) > 120
+                    or "\n" in why or "\r" in why):
+                raise ValueError("Missing or invalid why_it_matters (one sentence, 1–120 characters)")
+            for text in [bullet.get("text"), *details, why]:
                 if not isinstance(text, str) or not text.strip() or len(text) > 120 or "\n" in text:
                     raise ValueError("Invalid or overlong bullet")
                 key = re.sub(r"\s+", "", text)
@@ -243,7 +253,8 @@ def generate_valid_digest(client, messages, sources):
                 {"role": "user", "content": (
                     f"출력 검증 오류: {error}. 원문 근거를 유지하며 JSON 형식과 분량을 수정하라. "
                     "sections는 1~5개, 각 bullets는 1~3개, 각 details는 반드시 문자열 배열 0~2개. "
-                    "text와 details 각 문장은 120자 이하, 제목은 70자 이하, 전체 1800자 이하. "
+                    "모든 bullet에 필수 문자열 why_it_matters를 넣어 원문 근거의 의미·영향을 한 문장으로 설명하라. "
+                    "text·details·why_it_matters는 각각 120자 이하, 제목은 70자 이하, 모두 합해 1800자 이하. "
                     "sources에는 입력 source id를 1개 이상 사용하고 중복 문장은 병합하라. "
                     "설명 없이 수정한 전체 JSON 객체만 출력하라."
                 )},
@@ -264,6 +275,8 @@ def analyze_sources(sources):
                 {"role": "user", "content": (
                     "위 초안을 원문과 대조하여 최소 수정한 최종 JSON만 출력하라. "
                     "모든 bullet의 행위 주체·수치·시점·불확실성을 확인하라. "
+                    "각 why_it_matters가 사실 반복이 아닌 의미·맥락인지, 인용된 원문이 뒷받침하는지 확인하라. "
+                    "원문 밖의 영향·예측은 삭제하고, 편집상 추론은 '해석:'으로 구분하라. "
                     "검토 중인 제안을 발표/시행 완료로 바꾸거나, 예정된 행사를 이미 참석한 것으로 쓰지 마라. "
                     "지표를 참고하는 기관을 지표 발표 주체로 바꾸지 마라. "
                     "잠재적 비용 우위와 확정된 우위를 구분하라. "
@@ -310,6 +323,12 @@ def build_message(digest, sources, target):
                     plain.append(f"  - {detail}")
                     body.append(f"<li>{html.escape(detail)}</li>")
                 body.append("</ul>")
+            plain.append(f"  왜 중요한가: {bullet['why_it_matters']} [{refs}]")
+            body.append(
+                "<p style='margin:6px 0 10px;color:#374151;font-size:14px'>"
+                f"<strong>왜 중요한가:</strong> {html.escape(bullet['why_it_matters'])} "
+                f"<small>[{html.escape(refs)}]</small></p>"
+            )
             body.append("</li>")
         body.append("</ul>")
         plain.append("")

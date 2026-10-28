@@ -1,4 +1,8 @@
 import unittest
+import copy
+import json
+
+from bs4 import BeautifulSoup
 from datetime import date, datetime
 from email.message import EmailMessage
 from unittest.mock import Mock, patch
@@ -78,7 +82,7 @@ class GlobalNewsTests(unittest.TestCase):
                                 datetime.fromisoformat("2026-10-13T07:00:00+09:00"), DAY)
         source["id"] = "s1"
         digest = {"sections": [{"title": "뉴스", "bullets": [
-            {"text": "핵심 뉴스", "details": [], "sources": ["s1"]}]}]}
+            {"text": "핵심 뉴스", "details": [], "why_it_matters": "원문에 근거한 영향과 한계를 이해하는 데 필요한 맥락입니다.", "sources": ["s1"]}]}]}
         mail = Mock()
         mail.login.return_value = ("OK", [])
         with patch.dict(os.environ, {"EMAIL_USER": g.SOURCE_ACCOUNT, "EMAIL_PASS": "test"}), \
@@ -113,7 +117,7 @@ class GlobalNewsTests(unittest.TestCase):
     def test_all_publishers_must_be_represented(self):
         sources = [{"id": f"s{i}", "kind": kind} for i, kind in enumerate(g.EXPECTED_SOURCES)]
         value = {"sections": [{"title": "뉴스", "bullets": [
-            {"text": "핵심 뉴스", "details": [], "sources": ["s0"]}]}]}
+            {"text": "핵심 뉴스", "details": [], "why_it_matters": "원문에 근거한 영향과 한계를 이해하는 데 필요한 맥락입니다.", "sources": ["s0"]}]}]}
         with self.assertRaisesRegex(ValueError, "omitted source"):
             g.validate_digest(value, sources)
         value["sections"][0]["bullets"][0]["sources"] = [s["id"] for s in sources]
@@ -122,7 +126,7 @@ class GlobalNewsTests(unittest.TestCase):
     def test_output_and_legacy_duplicate_guard(self):
         source = g.parse_source(raw("briefing@nature.com"), datetime.fromisoformat("2026-10-13T07:00:00+09:00"), DAY)
         source["id"] = "s1"
-        digest = {"sections": [{"title": "과학", "bullets": [{"text": "연구 결과 발표", "details": [], "sources": ["s1"]}]}]}
+        digest = {"sections": [{"title": "과학", "bullets": [{"text": "연구 결과 발표", "details": [], "why_it_matters": "원문에 근거한 영향과 한계를 이해하는 데 필요한 맥락입니다.", "sources": ["s1"]}]}]}
         msg = g.build_message(digest, [source], DAY)
         self.assertEqual(str(msg["Subject"]), "🌐 통합 뉴스 요약 · 2026-10-13")
         text = msg.get_body(preferencelist=("plain",)).get_content()
@@ -130,6 +134,83 @@ class GlobalNewsTests(unittest.TestCase):
         self.assertIn("뉴닉", text)
         self.assertIn("수집 구간", text)
         self.assertEqual(g.reservation_name(DAY), "SEMAFOR_DAILY_2026-10-13")
+
+
+class ImportanceTests(unittest.TestCase):
+    def setUp(self):
+        self.sources = [{"id": "s1", "kind": "Flagship", "subject": "Policy",
+                         "text": "Lawmakers proposed audits; the bill has not passed.",
+                         "links": ["https://example.com/policy"]}]
+        self.digest = {"sections": [{"title": "정책", "bullets": [
+            {"text": "의원들이 AI 감사 법안을 제안했다.", "details": ["아직 통과되지 않았다."],
+             "why_it_matters": "해석: 감사 의무의 실현 여부는 입법 결과에 달려 있다.",
+             "sources": ["s1"]}]}]}
+
+    def test_importance_is_required_nonempty_single_line_and_short(self):
+        for value in (None, "", "   ", [], "x" * 121, "first\nsecond", "first\rsecond"):
+            candidate = copy.deepcopy(self.digest)
+            candidate["sections"][0]["bullets"][0]["why_it_matters"] = value
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "why_it_matters"):
+                g.validate_digest(candidate, self.sources)
+        del self.digest["sections"][0]["bullets"][0]["why_it_matters"]
+        with self.assertRaisesRegex(ValueError, "why_it_matters"):
+            g.validate_digest(self.digest, self.sources)
+
+    def test_importance_counts_toward_total_length(self):
+        candidate = {"sections": [
+            {"title": f"Section {i}", "bullets": [
+                {"text": f"Fact {i}-{j} " + "a" * 64, "details": [],
+                 "why_it_matters": f"Context {i}-{j} " + "b" * 64, "sources": ["s1"]}
+                for j in range(3)]}
+            for i in range(5)]}
+        with self.assertRaisesRegex(ValueError, "compact limit"):
+            g.validate_digest(candidate, self.sources)
+
+    def test_each_item_renders_escaped_context_and_references_in_both_formats(self):
+        self.digest["sections"][0]["bullets"].append({
+            "text": "위원회가 법안을 검토한다.", "details": [],
+            "why_it_matters": "<script>이 문구는 태그가 아닌 텍스트로 표시된다.</script>",
+            "sources": ["s1"]})
+        msg = g.build_message(self.digest, self.sources, DAY)
+        plain = msg.get_body(preferencelist=("plain",)).get_content()
+        markup = msg.get_body(preferencelist=("html",)).get_content()
+        self.assertEqual(plain.count("왜 중요한가:"), 2)
+        soup = BeautifulSoup(markup, "html.parser")
+        self.assertIsNone(soup.find("script"))
+        items = soup.select("body > ul > li")
+        self.assertEqual(len(items), 2)
+        for item, bullet in zip(items, self.digest["sections"][0]["bullets"]):
+            self.assertEqual(item.p.strong.get_text(), "왜 중요한가:")
+            self.assertIn(bullet["why_it_matters"], item.p.get_text())
+            self.assertIn("[s1]", item.p.get_text())
+            self.assertIn(f"왜 중요한가: {bullet['why_it_matters']} [s1]", plain)
+
+    def test_missing_context_is_repaired_before_a_digest_is_returned(self):
+        invalid = copy.deepcopy(self.digest)
+        del invalid["sections"][0]["bullets"][0]["why_it_matters"]
+        response = lambda d: Mock(choices=[Mock(
+            finish_reason="stop", message=Mock(content=json.dumps(d)))])
+        client = Mock()
+        client.chat.completions.create.side_effect = [response(invalid), response(self.digest)]
+        self.assertEqual(g.generate_valid_digest(client, [], self.sources), self.digest)
+        repair = client.chat.completions.create.call_args.kwargs["messages"][-1]["content"]
+        self.assertIn("why_it_matters", repair)
+
+    def test_missing_context_prevents_delivery_and_reservation(self):
+        del self.digest["sections"][0]["bullets"][0]["why_it_matters"]
+        mail = Mock()
+        mail.login.return_value = ("OK", [])
+        with patch.dict(os.environ, {"SEMAFOR_EMAIL_USER": g.SOURCE_ACCOUNT,
+                                     "SEMAFOR_EMAIL_PASS": "test"}), \
+             patch.object(g.imaplib, "IMAP4_SSL", return_value=mail), \
+             patch.object(g, "already_reserved", return_value=False), \
+             patch.object(g, "collect_sources", return_value=self.sources), \
+             patch.object(g, "analyze_sources", return_value=self.digest), \
+             patch.object(g, "deliver") as deliver:
+            with self.assertRaisesRegex(ValueError, "why_it_matters"):
+                g.run(DAY)
+        deliver.assert_not_called()
+        mail.create.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()
