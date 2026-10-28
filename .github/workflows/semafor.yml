@@ -4,7 +4,10 @@ on:
   push:
     paths:
       - 'global_news.py'
-      - 'tests/test_global_news.py'
+      - 'analyzer.py'
+      - 'check_models.py'
+      - 'requirements.txt'
+      - 'tests/**'
       - '.github/workflows/semafor.yml'
   schedule:
     # Previous weekday cutoff to current cutoff, weekdays at 08:10 KST (Sunday-Thursday UTC).
@@ -15,6 +18,10 @@ on:
         description: "KST digest cutoff date (YYYY-MM-DD); blank means today"
         required: false
         type: string
+      check_models:
+        description: "Check both model APIs with synthetic sources; never send email"
+        default: false
+        type: boolean
       dry_run:
         description: "Generate without sending or reserving the date"
         default: true
@@ -38,8 +45,13 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests
+      - name: Check model API access without email
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.check_models }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python check_models.py
       - name: Generate and send integrated global news digest
-        if: github.event_name != 'push'
+        if: ${{ github.event_name != 'push' && !inputs.check_models }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
@@ -57,7 +69,7 @@ jobs:
           if [[ "$DRY_RUN" == "true" ]]; then args+=(--dry-run --output semafor-preview.eml); fi
           python global_news.py "${args[@]}"
       - name: Save manual dry-run preview
-        if: ${{ inputs.dry_run }}
+        if: ${{ inputs.dry_run && !inputs.check_models }}
         uses: actions/upload-artifact@v4
         with:
           name: semafor-preview

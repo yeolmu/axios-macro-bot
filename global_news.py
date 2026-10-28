@@ -225,7 +225,9 @@ def generate_valid_digest(client, messages, sources):
     context = messages.copy()
     for attempt in range(3):
         response = client.chat.completions.create(
-            model="gpt-4.1-2025-04-14", temperature=0.2, max_tokens=3500,
+            model="gpt-6.1-sol", reasoning_effort="low",
+            # The budget includes reasoning as well as the compact visible JSON.
+            max_completion_tokens=10000,
             response_format={"type": "json_object"}, messages=context.copy(),
         )
         choice = response.choices[0]
