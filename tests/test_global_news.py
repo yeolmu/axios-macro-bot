@@ -177,7 +177,7 @@ class ImportanceTests(unittest.TestCase):
         self.assertEqual(plain.count("왜 중요한가:"), 2)
         soup = BeautifulSoup(markup, "html.parser")
         self.assertIsNone(soup.find("script"))
-        items = soup.select("body > ul > li")
+        items = soup.select("h2 + ul > li")
         self.assertEqual(len(items), 2)
         for item, bullet in zip(items, self.digest["sections"][0]["bullets"]):
             self.assertEqual(item.p.strong.get_text(), "왜 중요한가:")

@@ -303,46 +303,109 @@ def build_message(digest, sources, target):
     start, end = receipt_window(target)
     coverage = f"수집 구간(KST): {start:%m/%d %H:%M} ~ {end:%m/%d %H:%M} (종료 시각 미포함)"
     plain = ["Global News Brief", f"{target} · {edition_label}", coverage, ""]
-    body = ["<!doctype html><html lang='ko'><meta charset='utf-8'>",
-            "<body style='max-width:640px;margin:24px auto;padding:16px;font-family:sans-serif;line-height:1.5'>",
-            f"<p><b>Global News Brief</b><br>{target} · {html.escape(edition_label)}<br>{coverage}</p>"]
+    # Match the Axios Macro email card and typography.
+    body = [f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>통합 뉴스 요약</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;">
+    <tr>
+      <td align="center" style="padding:28px 16px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+          style="max-width:640px;background:#ffffff;border-radius:10px;border:1px solid #e5e7eb;
+          box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+          <tr>
+            <td style="padding:28px 28px 8px;font-family:Georgia,'Times New Roman',serif;">
+              <p style="margin:0;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#6b7280;">
+                Global News Brief
+              </p>
+              <h1 style="margin:8px 0 0;font-size:22px;line-height:1.25;color:#111827;font-weight:700;">
+                통합 뉴스 요약
+              </h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 28px 20px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+              font-size:13px;color:#4b5563;line-height:1.5;border-bottom:1px solid #e5e7eb;">
+              <p style="margin:0;"><strong>기준일</strong> · {target}</p>
+              <p style="margin:6px 0 0;color:#6b7280;">{html.escape(edition_label)}</p>
+              <p style="margin:6px 0 0;color:#6b7280;">{html.escape(coverage)}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 28px 32px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;">
+              <div style="margin:0;font-family:inherit;font-size:15px;line-height:1.75;color:#111827;
+                word-wrap:break-word;letter-spacing:0.01em;">"""]
     if notice:
         plain.extend([notice, ""])
-        body.append(f"<p>{html.escape(notice)}</p>")
+        body.append(f'<p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#6b7280;">{html.escape(notice)}</p>')
     for number, section in enumerate(digest["sections"], 1):
         heading = f"{number}. {section['title']}"
         plain.append(heading)
-        body.append(f"<h2 style='font-size:17px'>{html.escape(heading)}</h2><ul>")
+        body.append(
+            f'<h2 style="margin:{"0" if number == 1 else "28px"} 0 12px;font-size:17px;'
+            f'line-height:1.5;font-weight:700;color:#111827;">{html.escape(heading)}</h2>'
+            '<ul style="margin:0;padding-left:22px;">'
+        )
         for bullet in section["bullets"]:
             refs = ", ".join(bullet["sources"])
             plain.append(f"- {bullet['text']} [{refs}]")
-            body.append(f"<li>{html.escape(bullet['text'])} <small>[{html.escape(refs)}]</small>")
+            body.append(
+                f'<li style="margin:0 0 16px;">{html.escape(bullet["text"])} '
+                f'<small style="font-size:12px;color:#6b7280;">[{html.escape(refs)}]</small>'
+            )
             if bullet["details"]:
-                body.append("<ul>")
+                body.append('<ul style="margin:6px 0 0;padding-left:20px;">')
                 for detail in bullet["details"]:
                     plain.append(f"  - {detail}")
-                    body.append(f"<li>{html.escape(detail)}</li>")
+                    body.append(f'<li style="margin:0 0 4px;">{html.escape(detail)}</li>')
                 body.append("</ul>")
             plain.append(f"  왜 중요한가: {bullet['why_it_matters']} [{refs}]")
             body.append(
-                "<p style='margin:6px 0 10px;color:#374151;font-size:14px'>"
+                "<p style='margin:6px 0 0;color:#4b5563;font-size:14px;line-height:1.75'>"
                 f"<strong>왜 중요한가:</strong> {html.escape(bullet['why_it_matters'])} "
-                f"<small>[{html.escape(refs)}]</small></p>"
+                f'<small style="font-size:12px;color:#6b7280;">[{html.escape(refs)}]</small></p>'
             )
             body.append("</li>")
         body.append("</ul>")
         plain.append("")
     plain.append("원문:")
-    body.append("<p>원문: ")
+    body.append(
+        '<div style="margin:28px 0 0;font-size:14px;line-height:1.5;">'
+        '<p style="margin:0 0 12px;font-weight:700;">원문 보기</p>'
+    )
     for source in sources:
         for url in source["links"]:
             if not safe_url(url):
                 raise ValueError("Unsafe source URL")
             label = f"[{source['id']}] {source['kind']} · {source['subject']}"
             plain.append(f"- {label}: {url}")
-            body.append(f'<br><a href="{html.escape(url, quote=True)}">{html.escape(label)}</a>')
+            body.append(
+                f'<p style="margin:0 0 10px;"><a href="{html.escape(url, quote=True)}" '
+                'style="display:inline-block;padding:10px 18px;background:#111827;color:#ffffff;'
+                'text-decoration:none;border-radius:6px;font-weight:600;word-break:break-word;">'
+                f'{html.escape(label)}</a></p>'
+            )
     plain.append("\nGlobal News Brief · 자동 번역 및 요약")
-    body.append("</p><p style='font-size:12px;color:#777'>Global News Brief · 자동 번역 및 요약</p></body></html>")
+    body.append("""</div></div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 28px 24px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+              font-size:12px;color:#9ca3af;line-height:1.5;">
+              Macro Gorilla · 자동 번역 및 요약
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>""")
     msg.set_content("\n".join(plain))
     msg.add_alternative("\n".join(body), subtype="html")
     return msg
