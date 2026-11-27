@@ -1,5 +1,36 @@
 # Macro Gorilla
 
+## 현재 운영 — 2026-11-27 개편
+
+**현재 발행은 [briefing.py](briefing.py)와 [briefing.yml](.github/workflows/briefing.yml)만 담당합니다.**
+Axios Macro, Semafor Flagship/Washington DC, 뉴닉, Nature Briefing을 수·토 10:00 KST에 한 통으로 발행합니다.
+아래의 두 일간 브리핑 문서는 이전 운영 기록입니다. 두 기존 워크플로우는 예약 실행과 발송을 제거하고 수동 검사만 남겼습니다.
+원문 Gmail 구독·수신·보관, 수신자 secret, 다른 저장소 및 개인 회고 자동화는 변경하지 않습니다.
+
+- 제목: `🌐 ` + 매회 생성한 핵심 소식/인사이트. 발신: `Macro Gorilla <sub.seounyeol@gmail.com>`.
+- 5,000~6,000자, 10~12분 목표. 경제35/세계20/한국15/과학15/기술15 유연 배분.
+- 승인된 4차 테스트 이메일에서 추출한 [terminal.html](templates/terminal.html)의 표·인라인 CSS·mono 서체·600px 레이아웃을 사용합니다.
+- 수집은 Gmail All Mail의 **INTERNALDATE** 기준 `[마지막 성공 cutoff, 이번 cutoff)`입니다. 발송이 실패하면 cutoff를 전진시키지 않습니다.
+- 첫 전환: 통합 뉴스의 마지막 확인된 성공 발행(11/27 08:10 KST) 이후. Axios는 기존 `AXIOS_PROCESSED`를 제외한 과거 미처리 원문도 조회합니다. `AXIOS_PROCESSING`은 발송 여부가 모호하므로 자동 재발송하지 않습니다.
+- 일부 매체가 안 왔으면 해당 사실을 표시하고 수신 자료로 발행합니다. 전체 원문 없음/입력 과다/생성 검증 실패는 발송하지 않고 다음 구간에 이어집니다.
+- 원문 내용 fingerprint는 Gmail 발행 journal에 저장되어 재수신·재시도 중복을 제외합니다. 최초 전환 이후 일간 코드 라벨에는 의존하지 않습니다.
+- `MG_BRIEFING_CLAIM_*` Gmail 폴더 생성이 원자적 발송 예약입니다. intent 저장 후 SMTP, 성공 후 journal checkpoint를 기록합니다. SMTP 결과가 불확실하면 예약을 유지합니다.
+- 중단 후에는 Sent의 Message-ID·본문 hash 헤더·수신자를 대조해 성공 기록을 복구합니다. Sent로 확인할 수 없는 예약은 자동 재발송과 다음 발행을 차단합니다. 운영자가 발송 여부를 확인한 뒤에만 예약을 조정해야 합니다.
+- Github Actions 예약은 UTC `01:00 수·토`입니다. 실행 시작은 GitHub 사정으로 지연될 수 있으며, 지연돼도 최신 수·토 10시 슬롯과 기존 성공 checkpoint를 사용합니다.
+
+### 검증과 수동 실행
+
+`python -m unittest discover -s tests`는 실제 발송 없이 검사합니다.
+Actions의 **Macro Gorilla Briefing → Run workflow**는 기본 `dry_run=true`입니다.
+수동 미리보기는 timezone을 포함한 과거 cutoff를 지정할 수 있습니다. 예: `2026-11-27T21:00:00+09:00`.
+미리보기는 원문과 모델 API를 읽고 HTML/EML/JSON artifact만 생성하며, Gmail 예약·journal·원문 라벨·SMTP를 변경하지 않습니다.
+artifact는 로그인 필요, 1일 보존입니다. 뉴스 원문/계정 비밀은 저장소에 커밋하지 마세요.
+`dry_run=false` 수동 발송은 정기 실행과 같은 슬롯·checkpoint·예약을 사용합니다. 임의 cutoff 실발송은 금지합니다.
+
+---
+
+## 이전 일간 시스템 운영 기록
+
 Gmail로 받은 뉴스레터를 OpenAI로 한국어 요약하고, HTML과 일반 텍스트 이메일로 전달하는 Python 자동화입니다. GitHub 저장소 이름은 `axios-macro-bot`이며, 두 브리핑을 독립적으로 운영합니다.
 
 ## 브리핑과 예약 실행

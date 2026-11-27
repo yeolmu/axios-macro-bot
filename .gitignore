@@ -3,3 +3,5 @@ __pycache__/
 .env
 .test-deps/
 artifacts/
+.deps/
+templates/approved-pilot-04.html

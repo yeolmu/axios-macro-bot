@@ -1,43 +1,19 @@
-name: Axios Macro Bot
+name: Axios Macro Bot (retired delivery)
 
+# Publisher subscriptions stay active; delivery moved to briefing.yml.
 on:
-  schedule:
-    - cron: "30 23 * * *"
   workflow_dispatch:
-    inputs:
-      retry_failed:
-        description: "Retry all AXIOS_FAILED messages"
-        required: false
-        default: false
-        type: boolean
+
+permissions:
+  contents: read
 
 jobs:
-  run-bot:
+  verify-only:
     runs-on: ubuntu-latest
-
     steps:
-      - name: 코드 가져오기
-        uses: actions/checkout@v4
-
-      - name: Python 설치
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-
-      - name: 라이브러리 설치
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-
-      - name: 테스트
-        run: python -m unittest discover -s tests
-
-      - name: 실행
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          EMAIL_USER: ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
-          RETRY_FAILED: ${{ inputs.retry_failed || 'false' }}
-        run: |
-          python main.py
+          python-version: '3.11'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest discover -s tests
