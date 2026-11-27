@@ -27,6 +27,15 @@ Actions의 **Macro Gorilla Briefing → Run workflow**는 기본 `dry_run=true`�
 이 저장소는 공개이므로 개인 Gmail 원문을 담은 artifact는 업로드하지 않습니다. 로그에는 구간·건수·분량·발신 MIME 검증 결과만 남깁니다. 뉴스 원문/계정 비밀은 저장소에 커밋하지 마세요.
 `dry_run=false` 수동 발송은 정기 실행과 같은 슬롯·checkpoint·예약을 사용합니다. 임의 cutoff 실발송은 금지합니다.
 
+### 개편 검증 기록
+
+- 2026-11-27 실제 Gmail 원문 dry-run [#3](https://github.com/yeolmu/axios-macro-bot/actions/runs/46011445845) 성공.
+- 검증 구간: 11/27 08:10 이상~21:00 미만 KST. 새 원문 1건(Flagship), 최종 편집 문자 수 5,377자.
+- 모델 원문 대조 검토, 출처 참조·수치 근거·허용 링크·본문 구조·분량·MIME From 검증 완료. 실제 메일 발송 및 Gmail journal/예약 변경 없음. 업로드 artifact 0개.
+- 승인된 4차 이메일과 body/h1/h2/600px shell 스타일을 직접 비교하여 동일함을 확인.
+- 로컬 검사 총 65개: 경계 시각, 지연 실행, 실패 후 구간 유지, 내용 중복, 미수신 매체, dry-run 무변경, SMTP 불확실성, 원자적 예약과 성공 checkpoint 순서, 생성 복구/재검토 포함.
+- 최초 새 정기 발행 슬롯은 2026-11-28(토) 10:00 KST. 정기 발송 및 수신함 도착은 이 검증 시점에는 아직 실행 전이며, GitHub 예약 시작은 지연될 수 있음.
+
 ---
 
 ## 이전 일간 시스템 운영 기록

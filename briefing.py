@@ -33,6 +33,7 @@ CONCEPTS = {
     '국내총생산': 'https://www.bea.gov/data/gdp/gross-domestic-product',
     '소비자물가': 'https://www.bls.gov/cpi/',
     '고용': 'https://www.bls.gov/ces/',
+    '노동생산성': 'https://www.bls.gov/productivity/',
     '한국 통화정책': 'https://www.bok.or.kr/portal/main/main.do',
     '과학 연구 읽기': 'https://www.nature.com/nature/articles',
     '보이저': 'https://science.nasa.gov/mission/voyager/',
@@ -108,8 +109,14 @@ def fetch_message(mail, uid):
 def collect_sources(mail, start, end, processed=(), bootstrap=False, axios_only=False, account=SOURCE_ACCOUNT):
     checked(mail.select(mailbox_for(mail, 'All'), readonly=True), 'SELECT All Mail')
     # On migration, old Axios failures/archived unprocessed originals are also eligible.
-    if bootstrap or axios_only:
-        query = '(FROM "macro@axios.com")'
+    if bootstrap:
+        # Gmail filters already-sent originals server-side; still inspect the
+        # returned labels so ambiguous PROCESSING messages cannot slip through.
+        query = '(X-GM-RAW "from:macro@axios.com -label:AXIOS_PROCESSED")'
+    elif axios_only:
+        since = (start - timedelta(days=1)).strftime('%d-%b-%Y')
+        before = (end + timedelta(days=2)).strftime('%d-%b-%Y')
+        query = f'(SINCE {since} BEFORE {before} FROM "macro@axios.com")'
     else:
         since = (start - timedelta(days=1)).strftime('%d-%b-%Y')
         before = (end + timedelta(days=2)).strftime('%d-%b-%Y')
@@ -158,6 +165,7 @@ def collect_sources(mail, start, end, processed=(), bootstrap=False, axios_only=
         original = 'https://mail.google.com/mail/u/?authuser=' + quote(account) + '#all/' + format(int(gm), 'x')
         sources.append({'kind': kind, 'subject': subject, 'text': text,
                         'received_at': received.isoformat(), 'fingerprint': fingerprint,
+                        'collected_at': datetime.now(KST).isoformat(),
                         'gmail_id': gm, 'original': original, 'article_links': links})
     return sources
 
@@ -313,8 +321,10 @@ def analyze_sources(sources):
                     raise ValueError('Incomplete briefing generation')
                 try:
                     result = validate_digest(json.loads(choice.message.content), sources)
+                    print(f'Generation pass {review + 1}, attempt {attempt + 1}: validated {len(digest_text(result))} characters', flush=True)
                     break
                 except (ValueError, KeyError, TypeError) as exc:
+                    print(f'Generation pass {review + 1}, attempt {attempt + 1}: structural validation repair required', flush=True)
                     if attempt == 2:
                         raise
                     messages += [{'role': 'assistant', 'content': choice.message.content},
@@ -359,7 +369,8 @@ def render(d, sources, start, end):
             body.append(f'<td valign="top" style="padding:10px 8px;{FONT}border-right:1px solid #34434b;"><div style="font-size:10px;line-height:15px;color:#92a5af;">{html.escape(s["label"])}</div><div style="font-size:19px;line-height:29px;color:#e8bf79;font-weight:700;">{html.escape(s["value"])}</div><div style="font-size:10px;line-height:15px;color:#92a5af;">{html.escape(s["context"])}</div></td>')
         body.append('</tr></table>')
         for s in d['signals']:
-            body.append(f'<div style="{FONT}font-size:10px;line-height:16px;color:#8699a3;margin-top:7px;">基準 / {html.escape(s["as_of"])} · SOURCE / ' + ' · '.join(references([s['source']])) + ' · 수집 / ' + html.escape(by_id[s['source']]['received_at']) + '</div>')
+            origin = by_id[s['source']]
+            body.append(f'<div style="{FONT}font-size:10px;line-height:16px;color:#8699a3;margin-top:7px;">기준 / {html.escape(s["as_of"])} · SOURCE / ' + ' · '.join(references([s['source']])) + ' · 수신 / ' + html.escape(origin['received_at']) + ' · 수집 / ' + html.escape(origin.get('collected_at', end.isoformat())) + '</div>')
     else:
         body.append(f'<p style="{BODY}">이번 수집 원문에서 확인 가능한 시장 수치 없음.</p>')
     missing = set(KINDS) - {s['kind'] for s in sources}
@@ -401,9 +412,9 @@ def render(d, sources, start, end):
     template = (Path(__file__).parent / 'templates/terminal.html').read_text(encoding='utf-8')
     values = {'edition': end.strftime('%Y%m%d'), 'date': end.strftime('%Y.%m.%d / %a').upper(),
               'title': d['title'], 'coverage': f'수집 구간(KST): {start:%Y-%m-%d %H:%M} ≤ 수신 시각 < {end:%Y-%m-%d %H:%M}'}
-    for key, value in values.items():
-        template = template.replace('{{' + key + '}}', html.escape(value))
-    return template.replace('{{content}}', ''.join(body))
+    # Substitute in one pass so source-derived text can never become a template token.
+    return re.sub(r'\{\{(edition|date|title|coverage|content)\}\}',
+                  lambda m: ''.join(body) if m[1] == 'content' else html.escape(values[m[1]]), template)
 
 
 def build_message(d, sources, start, end, recipient):

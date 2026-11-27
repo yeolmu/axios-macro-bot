@@ -1,4 +1,5 @@
 import email
+import json
 import unittest
 from datetime import datetime, timedelta
 from email.message import EmailMessage
@@ -144,6 +145,30 @@ class BriefingTests(unittest.TestCase):
             self.assertEqual(write.call_args.args[1]['status'], 'intent')
             mail.delete.assert_not_called()
 
+    def test_atomic_claim_precedes_smtp_and_success_checkpoint_follows(self):
+        d, sources = fixture()
+        msg, token = b.build_message(d, sources, self.start, self.end, 'reader@example.com')
+        mail, smtp = Mock(), Mock()
+        mail.create.return_value = ('OK', [])
+        smtp.send_message.return_value = {}
+        events = []
+        mail.create.side_effect = lambda name: (events.append('claim') or ('OK', []))
+        smtp.send_message.side_effect = lambda message: (events.append('send') or {})
+        with patch.object(b.smtplib, 'SMTP_SSL') as factory, patch.object(b, 'write_record') as write:
+            factory.return_value.__enter__.return_value = smtp
+            write.side_effect = lambda mail, record: events.append(record['status'])
+            self.assertEqual(b.deliver(mail, 'secret', msg, token, self.start, self.end, sources), 'sent')
+        self.assertEqual(events, ['claim', 'intent', 'send', 'success'])
+        mail.create.side_effect = None
+        mail.create.return_value = ('NO', [b'already exists'])
+        with patch.object(b.smtplib, 'SMTP_SSL') as factory, patch.object(b, 'write_record') as write:
+            factory.return_value.__enter__.return_value = smtp
+            smtp.reset_mock()
+            with self.assertRaises(RuntimeError):
+                b.deliver(mail, 'secret', msg, token, self.start, self.end, sources)
+            smtp.send_message.assert_not_called()
+            write.assert_not_called()
+
     def test_dry_run_never_reserves_or_sends(self):
         d, sources = fixture()
         with patch.dict(b.os.environ, {'EMAIL_USER': b.SOURCE_ACCOUNT, 'EMAIL_PASS': 'secret', 'RECEIVER_EMAIL': 'reader@example.com'}), \
@@ -170,6 +195,26 @@ class BriefingTests(unittest.TestCase):
         self.assertIn("cron: '0 1 * * 3,6'", content)
         self.assertIn('cancel-in-progress: false', content)
         self.assertIn("if: github.event_name != 'push'", content)
+
+    def test_generation_repairs_then_reviews_before_delivery(self):
+        d, sources = fixture()
+        client = Mock()
+        def response(content, reason='stop'):
+            return Mock(choices=[Mock(finish_reason=reason, message=Mock(content=content))])
+        client.chat.completions.create.side_effect = [response('{}'), response(json.dumps(d)), response(json.dumps(d))]
+        with patch.dict(b.os.environ, {'OPENAI_API_KEY': 'test-only'}), patch.object(b, 'OpenAI') as factory:
+            factory.return_value.__enter__.return_value = client
+            self.assertEqual(b.analyze_sources(sources), d)
+        self.assertEqual(client.chat.completions.create.call_count, 3)
+        request = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(request['model'], 'gpt-6.1-sol')
+        self.assertEqual(request['response_format'], {'type': 'json_object'})
+        self.assertIn('원문과 대조', request['messages'][-1]['content'])
+        client.chat.completions.create.side_effect = [response('{}', 'length')]
+        with patch.dict(b.os.environ, {'OPENAI_API_KEY': 'test-only'}), patch.object(b, 'OpenAI') as factory:
+            factory.return_value.__enter__.return_value = client
+            with self.assertRaisesRegex(ValueError, 'Incomplete'):
+                b.analyze_sources(sources)
 
 
 if __name__ == '__main__':
