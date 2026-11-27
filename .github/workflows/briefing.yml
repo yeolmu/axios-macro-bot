@@ -57,11 +57,5 @@ jobs:
           if [[ "$EVENT_NAME" == "workflow_dispatch" && "$DRY_RUN" != "false" ]]; then args+=(--dry-run); fi
           if [[ -n "$CUTOFF" ]]; then args+=(--cutoff "$CUTOFF"); fi
           python briefing.py "${args[@]}"
-      - name: Save authenticated preview artifact
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
-        uses: actions/upload-artifact@v4
-        with:
-          name: macro-gorilla-preview
-          path: artifacts/briefing.*
-          retention-days: 1
-          if-no-files-found: error
+      # Preview files remain ephemeral on the runner. This public repository must
+      # never upload private Gmail-derived HTML/EML/JSON artifacts.

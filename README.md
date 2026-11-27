@@ -23,8 +23,8 @@ Axios Macro, Semafor Flagship/Washington DC, 뉴닉, Nature Briefing을 수·토
 `python -m unittest discover -s tests`는 실제 발송 없이 검사합니다.
 Actions의 **Macro Gorilla Briefing → Run workflow**는 기본 `dry_run=true`입니다.
 수동 미리보기는 timezone을 포함한 과거 cutoff를 지정할 수 있습니다. 예: `2026-11-27T21:00:00+09:00`.
-미리보기는 원문과 모델 API를 읽고 HTML/EML/JSON artifact만 생성하며, Gmail 예약·journal·원문 라벨·SMTP를 변경하지 않습니다.
-artifact는 로그인 필요, 1일 보존입니다. 뉴스 원문/계정 비밀은 저장소에 커밋하지 마세요.
+미리보기는 원문과 모델 API를 읽고 실행기 내부에서만 HTML/EML/JSON을 검증하며, Gmail 예약·journal·원문 라벨·SMTP를 변경하지 않습니다.
+이 저장소는 공개이므로 개인 Gmail 원문을 담은 artifact는 업로드하지 않습니다. 로그에는 구간·건수·분량·발신 MIME 검증 결과만 남깁니다. 뉴스 원문/계정 비밀은 저장소에 커밋하지 마세요.
 `dry_run=false` 수동 발송은 정기 실행과 같은 슬롯·checkpoint·예약을 사용합니다. 임의 cutoff 실발송은 금지합니다.
 
 ---
